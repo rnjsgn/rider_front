@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, View, Text, ActivityIndicator, Alert, ScrollView } from "react-native";
-import MapView, { Marker, Polygon, PROVIDER_GOOGLE } from 'react-native-maps';
+import { StyleSheet, View, Text, ActivityIndicator, FlatList, Alert, ScrollView } from "react-native";
+import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import YoutubeIframe from 'react-native-youtube-iframe';
 
-export const Gps2 = () => {
+export const Gps = () => {
     const gps_style = StyleSheet.create({
         container: {
             flex: 1,
@@ -25,7 +25,16 @@ export const Gps2 = () => {
             width: '100%',
             height: 300,
             marginTop: 20,
-        }
+        },
+        listContainer: {
+            width: '100%',
+            padding: 10,
+        },
+        listItem: {
+            padding: 10,
+            borderBottomWidth: 1,
+            borderBottomColor: '#ccc',
+        },
     });
 
     const [location, setLocation] = useState(null);
@@ -34,15 +43,16 @@ export const Gps2 = () => {
     const [owners, setOwners] = useState([]);
     const [uses, setUses] = useState([]);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [replay, setReplay] = useState(false);
     const [videoId, setVideoId] = useState('');
 
+    // 유튜브 URL에서 videoId 추출
     const extractVideoId = (url) => {
         const regex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
-        const matches = url?.match(regex);
+        const matches = url.match(regex);
         return matches ? matches[1] : null;
     };
 
+    // 위치 권한 요청 및 현재 위치 가져오기
     useEffect(() => {
         const requestLocationPermission = async () => {
             const { status } = await Location.requestForegroundPermissionsAsync();
@@ -81,6 +91,7 @@ export const Gps2 = () => {
         requestLocationPermission();
     }, []);
 
+    // 가게 데이터 받아오기
     useEffect(() => {
         const fetchOwners = async () => {
             try {
@@ -102,36 +113,35 @@ export const Gps2 = () => {
         fetchOwners();
     }, []);
 
-    const isWithinSquareBoundary = (lat1, lon1, lat2, lon2, length = 4) => {
-        const toRadians = (degree) => degree * (Math.PI / 180);
+    // 반경 5km 내에 있는지 확인
+    const isWithinRadius = (lat1, lon1, lat2, lon2, radius = 2) => {
+        const toRadians = degree => degree * (Math.PI / 180);
         const earthRadiusKm = 6371;
 
-        const deltaLat = toRadians(lat2 - lat1);
-        const deltaLon = toRadians(lon2 - lon1);
+        const dLat = toRadians(lat2 - lat1);
+        const dLon = toRadians(lon2 - lon1);
 
-        const a = Math.sin(deltaLat / 2) ** 2 +
-                  Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
-                  Math.sin(deltaLon / 2) ** 2;
-
+        const a = 
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
         const distance = earthRadiusKm * c;
 
-        return distance <= (length / 2);
+        return distance <= radius;
     };
 
     useEffect(() => {
         if (location && owners.length > 0) {
             const nearbyOwners = owners.filter(owner => 
-                isWithinSquareBoundary(location.latitude, location.longitude, owner.latitude, owner.longitude)
+                isWithinRadius(location.latitude, location.longitude, owner.latitude, owner.longitude)
             );
             setUses(nearbyOwners);
         }
     }, [location, owners]);
 
     useEffect(() => {
-        console.log(uses)
-        console.log(currentIndex)
         if (uses.length > 0) {
             const url = uses[currentIndex]?.ad;
             const id = extractVideoId(url);
@@ -141,7 +151,7 @@ export const Gps2 = () => {
                 Alert.alert('유효하지 않은 유튜브 URL입니다');
             }
         }
-    }, [uses, currentIndex, replay]);
+    }, [uses, currentIndex]);
 
     useEffect(() => {
         const intervalId = setInterval(() => {
@@ -158,14 +168,8 @@ export const Gps2 = () => {
     }, []);
 
     const onStateChange = (state) => {
-        console.log(videoId)
         if (state === "ended") {
-            if (uses.length === 1) {
-                setVideoId('');
-                setReplay(prev => !prev);
-            } else if (uses.length > 1) {
-                setCurrentIndex((prevIndex) => (prevIndex + 1) % uses.length);
-            }
+            setCurrentIndex((prevIndex) => (prevIndex + 1) % uses.length);
         }
     };
 
@@ -205,15 +209,11 @@ export const Gps2 = () => {
                                     description={`전화 번호: ${owner.tel}`}
                                     pinColor="blue"
                                 />
-                                <Polygon
-                                    coordinates={[
-                                        { latitude: parseFloat(owner.latitude) - 0.015, longitude: parseFloat(owner.longitude) - 0.015 },
-                                        { latitude: parseFloat(owner.latitude) - 0.015, longitude: parseFloat(owner.longitude) + 0.015 },
-                                        { latitude: parseFloat(owner.latitude) + 0.015, longitude: parseFloat(owner.longitude) + 0.015 },
-                                        { latitude: parseFloat(owner.latitude) + 0.015, longitude: parseFloat(owner.longitude) - 0.015 },
-                                    ]}
-                                    fillColor="rgba(0,0,255,0.1)"
+                                <Circle
+                                    center={{ latitude: parseFloat(owner.latitude), longitude: parseFloat(owner.longitude) }}
+                                    radius={2000}
                                     strokeColor="rgba(0,0,255,0.5)"
+                                    fillColor="rgba(0,0,255,0.1)"
                                 />
                             </React.Fragment>
                         ))}
@@ -222,6 +222,7 @@ export const Gps2 = () => {
                         {uses.length > 0 ? (
                             <>
                                 <Text>가게 이름: {uses[currentIndex]?.name}</Text>
+                                <Text>총 광고 갯수 : {uses.length}</Text>
                                 {
                                     uses.length > 1
                                     ?
@@ -247,3 +248,4 @@ export const Gps2 = () => {
         </ScrollView>
     );
 };
+
