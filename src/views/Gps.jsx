@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { StyleSheet, View, Text, ActivityIndicator, ScrollView, Image } from "react-native";
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import React, { useState, useEffect } from "react";
+import { StyleSheet, View, Text, ActivityIndicator, Alert, ScrollView, Image } from "react-native";
+import MapView, { Marker, Polygon, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import YoutubeIframe from 'react-native-youtube-iframe';
-
-import Owner from '../../assets/images/owner.jpg';
 
 export const Gps = () => {
     const gps_style = StyleSheet.create({
@@ -23,149 +21,156 @@ export const Gps = () => {
             marginLeft: -25,
             marginTop: -25,
         },
-        listContainer: {
-            width: '100%',
-            padding: 10,
-        },
-        listItem: {
-            padding: 10,
-            borderBottomWidth: 1,
-            borderBottomColor: '#ccc',
-        },
         videoContainer: {
             width: '100%',
             height: 300,
-        }
+            marginTop: 20,
+        },
+        icon: {
+            width: 30,  // 원하는 너비
+            height: 30, // 원하는 높이
+            resizeMode: 'contain',
+          },
     });
 
     const [location, setLocation] = useState(null);
     const [address, setAddress] = useState('');
-    const [district, setDistrict] = useState('');
     const [loading, setLoading] = useState(true);
     const [owners, setOwners] = useState([]);
     const [uses, setUses] = useState([]);
-    const [videoId, setVideoId] = useState('');
     const [currentIndex, setCurrentIndex] = useState(0);
-
-    const requestLocationPermission = async () => {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-            getCurrentLocation();
-        } else {
-            setLoading(false);
-        }
-    };
-
-    const getCurrentLocation = async () => {
-        try {
-            const loc = await Location.getCurrentPositionAsync({});
-            setLocation({
-                latitude: loc.coords.latitude,
-                longitude: loc.coords.longitude,
-            });
-            reverseGeocode(loc.coords.latitude, loc.coords.longitude);
-        } catch (error) {
-            console.error("위치 정보를 가져오는 중 오류가 발생했습니다:", error);
-            setLoading(false);
-        }
-    };
-
-    const reverseGeocode = async (latitude, longitude) => {
-        try {
-            const address = await Location.reverseGeocodeAsync({ latitude, longitude });
-            if (address.length > 0) {
-                setAddress(address[0].formattedAddress || `${address[0].city} ${address[0].district}`);
-                setDistrict(address[0].district);
-            }
-        } catch (error) {
-            console.error("주소를 가져오는 중 오류가 발생했습니다:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        requestLocationPermission();
-    }, []);
-
-    const fetchOwners = useCallback(async () => {
-        try {
-            const response = await fetch('http://192.168.116.169:3000/owner/all', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    mode: 'no-cors',
-                },
-            });
-            const owner_data = await response.json();
-            setOwners(owner_data.data);
-        } catch (error) {
-            console.error('데이터를 가져오는 중 오류가 발생했습니다:', error);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchOwners();
-    }, [fetchOwners]);
+    const [replay, setReplay] = useState(false);
+    const [videoId, setVideoId] = useState('');
 
     const extractVideoId = (url) => {
-        if (!url) return null;
         const regex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
-        const matches = url.match(regex);
+        const matches = url?.match(regex);
         return matches ? matches[1] : null;
     };
 
     useEffect(() => {
+        const requestLocationPermission = async () => {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status === 'granted') {
+                getCurrentLocation();
+            } else {
+                setLoading(false);
+                Alert.alert('위치 접근 권한이 거부되었습니다');
+            }
+        };
+
+        const getCurrentLocation = async () => {
+            try {
+                setLocation({
+                    latitude: 35.1458,
+                    longitude: 128.9787,
+                });
+                reverseGeocode(35.1458, 128.9787);
+            } catch (error) {
+                console.error("위치 정보를 가져오는 중 오류가 발생했습니다:", error);
+                setLoading(false);
+            }
+        };
+
+        const reverseGeocode = async (latitude, longitude) => {
+            try {
+                const address = await Location.reverseGeocodeAsync({ latitude, longitude });
+                setAddress(address[0].formattedAddress || `${address[0].city} ${address[0].district}`);
+            } catch (error) {
+                console.error("주소를 가져오는 중 오류가 발생했습니다:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        requestLocationPermission();
+    }, []);
+
+    useEffect(() => {
+        const fetchOwners = async () => {
+            try {
+                const response = await fetch('http://192.168.116.169:3000/owner/all', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        mode: 'no-cors',
+                    },
+                });
+                const owner_data = await response.json();
+                setOwners(owner_data.data);
+            } catch (error) {
+                console.error('데이터를 가져오는 중 오류가 발생했습니다:', error);
+            }
+        };
+
+        fetchOwners();
+    }, []);
+
+    const isWithinSquareBoundary = (lat1, lon1, lat2, lon2, length = 4) => {
+        const toRadians = (degree) => degree * (Math.PI / 180);
+        const earthRadiusKm = 6371;
+
+        const deltaLat = toRadians(lat2 - lat1);
+        const deltaLon = toRadians(lon2 - lon1);
+
+        const a = Math.sin(deltaLat / 2) ** 2 +
+                  Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+                  Math.sin(deltaLon / 2) ** 2;
+
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        const distance = earthRadiusKm * c;
+
+        return distance <= (length / 2);
+    };
+
+    useEffect(() => {
+        if (location && owners.length > 0) {
+            const nearbyOwners = owners.filter(owner => 
+                isWithinSquareBoundary(location.latitude, location.longitude, owner.latitude, owner.longitude)
+            );
+            setUses(nearbyOwners);
+        }
+    }, [location, owners]);
+
+    useEffect(() => {
+        // console.log(uses)
+        // console.log(currentIndex)
         if (uses.length > 0) {
             const url = uses[currentIndex]?.ad;
             const id = extractVideoId(url);
             if (id) {
                 setVideoId(id);
+            } else {
+                Alert.alert('유효하지 않은 유튜브 URL입니다');
             }
         }
-    }, [uses, currentIndex]);
+    }, [uses, currentIndex, replay]);
 
     useEffect(() => {
         const intervalId = setInterval(() => {
             setLocation((prevLocation) => {
-                if (!prevLocation || (prevLocation.longitude >= 129.0187 && prevLocation.latitude >= 35.2418)) {
+                if (!prevLocation || prevLocation.longitude >= 129.1187) {
                     clearInterval(intervalId);
                     return prevLocation;
                 }
-                const newLocation = {
-                    latitude: prevLocation.latitude + 0.01,
-                    longitude: prevLocation.longitude + 0.003,
-                };
-                reverseGeocode(newLocation.latitude, newLocation.longitude);
-                return newLocation;
+                return { ...prevLocation, longitude: prevLocation.longitude + 0.0001 };
             });
-        }, 5000);
+        }, 100);
 
         return () => clearInterval(intervalId);
-    }, [location]);
-
-    useEffect(() => {
-        if (owners.length > 0 && district) {
-            const filteredOwners = owners.filter(owner => owner.location === district);
-            setUses(filteredOwners);
-            setCurrentIndex(0); // Ensure to reset currentIndex when uses updates
-        }
-    }, [owners, district]);
-
-    useEffect(() => {
-        if (uses.length > 0) {
-            const url = uses[0]?.ad;
-            const id = extractVideoId(url);
-            if (id) {
-                setVideoId(id);
-            }
-        }
-    }, [uses]);
+    }, []);
 
     const onStateChange = (state) => {
+        console.log(videoId)
         if (state === "ended") {
-            setCurrentIndex((prevIndex) => (prevIndex + 1) % uses.length);
+            if (uses.length === 1) {
+                setVideoId('');
+                setReplay(prev => !prev);
+            } else if (uses.length > 1) {
+                setCurrentIndex((prevIndex) => (prevIndex + 1) % uses.length);
+            }
         }
     };
 
@@ -191,35 +196,66 @@ export const Gps = () => {
                     >
                         {location && (
                             <Marker
-                                coordinate={{ latitude: location.latitude, longitude: location.longitude }}
-                                title="현재 위치"
-                                description="라이더의 현재위치"
-                                icon={require("../components/rider.png")}
-                            />
+                            coordinate={{ latitude: location.latitude, longitude: location.longitude }}
+                            title="현재 위치"
+                            description="라이더의 현재위치"
+                          >
+                                <Image
+                                source={require('../components/rider.png')}
+                                style={gps_style.icon}
+                                />
+                          </Marker>
                         )}
+                        {owners.map((owner, index) => (
+                            <React.Fragment key={index}>
+                                <Marker
+                                    coordinate={{ latitude: parseFloat(owner.latitude), longitude: parseFloat(owner.longitude) }}
+                                    title={owner.name}
+                                    description={`전화 번호: ${owner.tel}`}
+                                    pinColor="blue"
+                                />
+                                <Polygon
+                                    coordinates={[
+                                        { latitude: parseFloat(owner.latitude) - 0.015, longitude: parseFloat(owner.longitude) - 0.015 },
+                                        { latitude: parseFloat(owner.latitude) - 0.015, longitude: parseFloat(owner.longitude) + 0.015 },
+                                        { latitude: parseFloat(owner.latitude) + 0.015, longitude: parseFloat(owner.longitude) + 0.015 },
+                                        { latitude: parseFloat(owner.latitude) + 0.015, longitude: parseFloat(owner.longitude) - 0.015 },
+                                    ]}
+                                    fillColor="rgba(0,0,255,0.1)"
+                                    strokeColor="rgba(0,0,255,0.5)"
+                                />
+                            </React.Fragment>
+                        ))}
                     </MapView>
                     <View style={gps_style.videoContainer}>
                         {uses.length > 0 ? (
                             <>
                                 <Text>가게 이름: {uses[currentIndex]?.name}</Text>
-                                {uses.length > 1 && (
-                                    <Text>다음 가게: {uses[(currentIndex + 1) % uses.length]?.name}</Text>
-                                )}
-                                <Text>전화 번호: {uses[currentIndex]?.tel}</Text>
-                                <Text>위치: {uses[currentIndex]?.location}</Text>
-                                {district === uses[currentIndex]?.location ? (
-                                    <YoutubeIframe
-                                        height={300}
-                                        play={true}
-                                        videoId={videoId}
-                                        onChangeState={onStateChange}
-                                    />
-                                ) : (
-                                    <Image source={Owner} style={{ width: '100%', height: 300 }} />
-                                )}
+                                {
+                                    uses.length > 1
+                                    ?
+                                    <Text>다음 가게: {uses[currentIndex+1]?.name}</Text>
+                                    :
+                                    <></>
+                                }
+                                <Text>총 광고 갯수 : {uses.length}</Text>
+                                <Text>현재 지역 광고 리스트 : {
+                                        uses.map((use) => (
+                                             '"' + use.name + '" '
+                                        ))
+                                    }</Text>
+                                    
+                                <Text>가게 번호: {uses[currentIndex]?.tel}</Text>
+                                <Text>가게 위치: {uses[currentIndex]?.latitude}, {uses[currentIndex]?.longitude}</Text>
+                                <YoutubeIframe
+                                    height={300}
+                                    play={true}
+                                    videoId={videoId}
+                                    onChangeState={onStateChange}
+                                />
                             </>
                         ) : (
-                            <Text>해당 지역에 가게가 없습니다.</Text>
+                            <Text>반경 5km 내에 광고를 재생할 가게가 없습니다.</Text>
                         )}
                     </View>
                 </>
@@ -227,5 +263,3 @@ export const Gps = () => {
         </ScrollView>
     );
 };
-
-

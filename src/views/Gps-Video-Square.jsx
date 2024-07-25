@@ -25,7 +25,12 @@ export const Gps2 = () => {
             width: '100%',
             height: 300,
             marginTop: 20,
-        }
+        },
+        icon: {
+            width: 30,  // 원하는 너비
+            height: 30, // 원하는 높이
+            resizeMode: 'contain',
+          },
     });
 
     const [location, setLocation] = useState(null);
@@ -150,9 +155,9 @@ export const Gps2 = () => {
                     clearInterval(intervalId);
                     return prevLocation;
                 }
-                return { ...prevLocation, longitude: prevLocation.longitude + 0.01 };
+                return { ...prevLocation, longitude: prevLocation.longitude + 0.0001 };
             });
-        }, 5000);
+        }, 100);
 
         return () => clearInterval(intervalId);
     }, []);
@@ -189,14 +194,25 @@ export const Gps2 = () => {
                         }}
                         provider={PROVIDER_GOOGLE}
                     >
-                        {location && (
-                            <Marker
-                                coordinate={{ latitude: location.latitude, longitude: location.longitude }}
-                                title="현재 위치"
-                                description="라이더의 현재위치"
-                                icon={require('../components/rider.png')}
-                            />
-                        )}
+                        {
+                            location &&
+                            location?.map((loc, idx) => {
+                                // console.log(loc)
+                                return (
+                                    <Marker
+                                        coordinate={{ latitude: loc.latitude, longitude: loc.longitude }}
+                                        title="현재 위치"
+                                        description="라이더의 현재위치"
+                                        onPress={() => { setRiderIndex(idx); }}
+                                    >
+                                        <Image
+                                            source={require('../components/rider.png')}
+                                            style={gps_style.icon}
+                                        />
+                                    </Marker>
+                                )
+                            })
+                        }
                         {owners.map((owner, index) => (
                             <React.Fragment key={index}>
                                 <Marker

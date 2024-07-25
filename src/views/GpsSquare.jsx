@@ -110,11 +110,15 @@ export const Gps = () => {
                     >
                         {location && (
                             <Marker
-                                coordinate={{ latitude: location.latitude, longitude: location.longitude }}
-                                title="현재 위치"
-                                description="라이더의 현재위치"
-                                icon={require('../components/rider.png')}
-                            />
+                            coordinate={{ latitude: location.latitude, longitude: location.longitude }}
+                            title="현재 위치"
+                            description="라이더의 현재위치"
+                          >
+                                <Image
+                                source={require('../components/rider.png')}
+                                style={gps_style.icon}
+                                />
+                          </Marker>
                         )}
                         {owners.map((owner, index) => (
                             <React.Fragment key={index}>
